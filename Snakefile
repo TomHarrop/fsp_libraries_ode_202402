@@ -1,13 +1,21 @@
 #!/usr/bin/env python3
 
-import pandas as pd
-from pathlib import Path
 from functools import cache
+from pathlib import Path
+from snakemake.logging import logger
+import pandas as pd
+import re
 
 
 @cache
 def read_sample_csv(sample_data_file):
-    return pd.read_csv(sample_data_file, index_col="name")
+    my_csv = pd.read_csv(sample_data_file, index_col="name")
+    for i, row in my_csv.iterrows():
+        sanitised_name = sanitise_sample_name(i)
+        if sanitised_name != i:
+            logger.warning(f"Replacing sample name {i} with {sanitised_name}")
+            my_csv.rename(index={i: sanitised_name}, inplace=True)
+    return my_csv
 
 
 @cache
@@ -29,6 +37,11 @@ def find_sample_input(wildcards):
         my_plate,
         f"{wildcards.sample}.{{read}}.fastq.gz",
     )
+
+
+@cache
+def sanitise_sample_name(sample_name):
+    return re.sub("[^a-zA-Z0-9_\-]", "", sample_name)
 
 
 raw_read_directory = Path("data", "raw_reads")
@@ -58,6 +71,7 @@ for plate_path in all_plates:
         sample_to_plate[sample] = plate_path.name
 
 all_samples = sorted(set(sample_to_plate.keys()))
+
 
 rule target:
     input:
