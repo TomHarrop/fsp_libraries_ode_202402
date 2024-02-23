@@ -85,6 +85,9 @@ rule collect_demuxed_files:
             "all_samples",
             "{sample}.{read}.fastq.gz",
         ),
+    handover: True
+    shell:
+        "ln -s {input} {output}"
 
 
 for plate_path in all_plates:
