@@ -135,14 +135,16 @@ for plate_path in all_plates:
                 read=["r1", "r2", "unpaired"],
             ),
         params:
-            outdir=lambda wildcards, output: Path(output[0]).parent,
-            read_dir=lambda wildcards, input: Path(input.read_files[0]).parent,
+            outdir=lambda wildcards, output: Path(output[0]).resolve().parent,
+            read_dir=lambda wildcards, input: Path(input.read_files[0])
+            .resolve()
+            .parent,
             restart_times=5,
             mem_gb=lambda wildcards, resources: int(
                 resources.mem_mb / 1e3 * 0.9
             ),
         log:
-            Path(logdir, "tcdemux_unpooled.log"),
+            Path(logdir, f"tcdemux_unpooled.{my_plate}.log"),
         resources:
             mem_mb=lambda wildcards, threads, attempt: (threads // 5)
             * 8e3
