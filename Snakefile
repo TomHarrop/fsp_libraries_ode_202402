@@ -5,6 +5,7 @@ from pathlib import Path
 from snakemake.logging import logger
 import pandas as pd
 import re
+import tempfile
 
 
 @cache
@@ -47,6 +48,17 @@ def sanitise_sample_name(sample_name):
 raw_read_directory = Path("data", "raw_reads")
 outdir = Path("output")
 logdir = Path(outdir, "logs")
+
+# set up a temporary directory for this run
+try:
+    run_tmpdir = config["run_tmpdir"]
+    print(f"Caught run_tmpdir {run_tmpdir}")
+except KeyError as e:
+    print(f"{e} not set in config")
+    run_tmpdir = tempfile.mkdtemp()
+    print(f"Setting run_tmpdir to {run_tmpdir}")
+    print("This probably won't work on a cluster!")
+
 
 adaptor_files = [Path("data", "adaptors", "bbmap_39.01_adaptors.fa")]
 
@@ -109,7 +121,7 @@ for plate_path in all_plates:
     rule:
         input:
             read_files=[x for x in Path(plate_path).glob("*.fastq*")],
-            sample_data=Path(plate_path, "sample_data.csv"),
+            sample_data=Path(run_tmpdir, my_plate, "sample_data.csv"),
             adaptor_files=my_adaptors,
         output:
             expand(
@@ -149,3 +161,11 @@ for plate_path in all_plates:
             "--mem_gb {params.mem_gb} "
             "--restart_times {params.restart_times} "
             "&> {log}"
+
+    rule:
+        input:
+            Path(plate_path, "sample_data.csv"),
+        output:
+            Path(run_tmpdir, my_plate, "sample_data.csv"),
+        run:
+            read_sample_csv(input[0]).to_csv(output[0])
