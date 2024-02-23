@@ -58,8 +58,6 @@ for plate_path in all_plates:
         sample_to_plate[sample] = plate_path.name
 
 all_samples = sorted(set(sample_to_plate.keys()))
-print(all_samples)
-
 
 rule target:
     input:
