@@ -111,7 +111,9 @@ rule collect_demuxed_files:
         ),
     handover: True
     shell:
-        "ln -s {input} {output}"
+        "ln -s "
+        "$( readlink -f {input} ) "
+        "$( readlink -f {output} )"
 
 
 for plate_path in all_plates:
