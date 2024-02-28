@@ -8,6 +8,11 @@ import re
 import tempfile
 
 
+#############
+# FUNCTIONS #
+#############
+
+
 @cache
 def check_pool_file(pool_file):
     return Path(pool_file).is_file()
@@ -50,6 +55,10 @@ def sanitise_sample_name(sample_name):
     return re.sub("[^a-zA-Z0-9_\-]", "", sample_name)
 
 
+###########
+# GLOBALS #
+###########
+
 raw_read_directory = Path("data", "raw_reads")
 outdir = Path("output")
 logdir = Path(outdir, "logs")
@@ -67,8 +76,20 @@ except KeyError as e:
 
 adaptor_files = [Path("data", "adaptors", "bbmap_39.01_adaptors.fa")]
 
+# containers
 tcdemux = "docker://quay.io/biocontainers/tcdemux:0.0.24--pyhdfd78af_0"
 
+# modules
+module_tag = "0.0.42"
+hybpiper_snakefile = github(
+    "tomharrop/smk-modules",
+    path="modules/hybpiper/Snakefile",
+    tag=module_tag,
+)
+
+########
+# MAIN #
+########
 
 all_plates = [
     Path(x) for x in raw_read_directory.glob("*") if Path(x).is_dir()
@@ -89,19 +110,46 @@ for plate_path in all_plates:
 
 all_samples = sorted(set(sample_to_plate.keys()))
 
+# see tomharrop/gap_library_tests/data/target_files/README.md for how this was
+# generated
+target_file = Path("data", "target_files", "gap_targets.fa.gz")
 
-rule target:
-    input:
-        expand(
-            Path(
-                outdir,
-                "010_tcdemux_unpooled",
-                "all_samples",
-                "{sample}.{read}.fastq.gz",
+
+#########
+# RULES #
+#########
+
+
+# rule target:
+#     input:
+#         expand(
+#             Path(
+#                 outdir,
+#                 "010_tcdemux_unpooled",
+#                 "all_samples",
+#                 "{sample}.{read}.fastq.gz",
+#             ),
+#             sample=all_samples,
+#             read=["r1", "r2"],
+#         ),
+
+
+module hybpiper:
+    snakefile:
+        hybpiper_snakefile
+    config:
+        {
+            "outdir": Path(outdir, "020_hybpiper"),
+            "read_directory": Path(
+            outdir, "010_tcdemux_unpooled", "all_samples"
             ),
-            sample=all_samples,
-            read=["r1", "r2"],
-        ),
+            "run_tmpdir": run_tmpdir,
+            "sample_list": all_samples,
+            "target_file": target_file,
+        }
+
+
+use rule * from hybpiper as hybpiper_*
 
 
 rule collect_demuxed_files:
