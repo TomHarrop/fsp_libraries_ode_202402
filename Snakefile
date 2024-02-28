@@ -162,7 +162,10 @@ rule collect_demuxed_files:
             "all_samples",
             "{sample}.{read}.fastq.gz",
         ),
-    handover: True
+    threads: 1
+    resources:
+        mem_mb=1e3,
+        time=1,
     shell:
         "ln -s "
         "$( readlink -f {input} ) "
