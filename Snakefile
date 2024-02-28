@@ -9,24 +9,8 @@ import tempfile
 
 
 @cache
-def read_sample_csv(sample_data_file):
-    my_csv = pd.read_csv(sample_data_file, index_col="name")
-    for i, row in my_csv.iterrows():
-        sanitised_name = sanitise_sample_name(i)
-        if sanitised_name != i:
-            logger.warning(f"Replacing sample name {i} with {sanitised_name}")
-            my_csv.rename(index={i: sanitised_name}, inplace=True)
-    return my_csv
-
-
-@cache
-def get_all_samples(sample_data_file):
-    return sorted(set(read_sample_csv(sample_data_file).index))
-
-
-@cache
-def get_all_pools(sample_data_file):
-    return sorted(set(read_sample_csv(sample_data_file)["pool_name"]))
+def check_pool_file(pool_file):
+    return Path(pool_file).is_file()
 
 
 @cache
@@ -38,6 +22,27 @@ def find_sample_input(wildcards):
         my_plate,
         f"{wildcards.sample}.{{read}}.fastq.gz",
     )
+
+
+@cache
+def get_all_pools(sample_data_file):
+    return sorted(set(read_sample_csv(sample_data_file)["pool_name"]))
+
+
+@cache
+def get_all_samples(sample_data_file):
+    return sorted(set(read_sample_csv(sample_data_file).index))
+
+
+@cache
+def read_sample_csv(sample_data_file):
+    my_csv = pd.read_csv(sample_data_file, index_col="name")
+    for i, row in my_csv.iterrows():
+        sanitised_name = sanitise_sample_name(i)
+        if sanitised_name != i:
+            logger.warning(f"Replacing sample name {i} with {sanitised_name}")
+            my_csv.rename(index={i: sanitised_name}, inplace=True)
+    return my_csv
 
 
 @cache
@@ -171,5 +176,14 @@ for plate_path in all_plates:
             Path(plate_path, "sample_data.csv"),
         output:
             Path(run_tmpdir, my_plate, "sample_data.csv"),
+        params:
+            plate_path,
         run:
-            read_sample_csv(input[0]).to_csv(output[0])
+            sample_csv = read_sample_csv(input[0])
+            for i, row in sample_csv.iterrows():
+                if not (
+                    check_pool_file(Path(params[0], row.r1_file))
+                    and check_pool_file(Path(params[0], row.r2_file))
+                ):
+                    raise ValueError(f"Missing pool file for {i}")
+            sample_csv.to_csv(output[0])
