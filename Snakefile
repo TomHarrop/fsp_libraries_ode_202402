@@ -152,6 +152,12 @@ module hybpiper:
 use rule * from hybpiper as hybpiper_*
 
 
+use rule hybpiper_assemble from hybpiper as hybpiper_hybpiper_assemble with:
+    resources:
+        time=lambda wildcards, attempt: 240 * attempt,
+        mem_mb=lambda wildcards, attempt: 16e3 * attempt,
+
+
 rule collect_demuxed_files:
     input:
         find_sample_input,
