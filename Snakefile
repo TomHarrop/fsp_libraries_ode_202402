@@ -4,9 +4,9 @@ from functools import cache
 from pathlib import Path
 from snakemake.logging import logger
 import pandas as pd
+import pickle
 import re
 import tempfile
-
 
 #############
 # FUNCTIONS #
@@ -110,6 +110,40 @@ for plate_path in all_plates:
 
 all_samples = sorted(set(sample_to_plate.keys()))
 
+
+# This is necessary because some samples have zero reads. The pipeline has to
+# be run in two steps for now.
+@cache
+def sample_status_file_exists(status_file):
+    return Path(status_file).resolve().is_file()
+
+
+@cache
+def check_sample_status(status_file):
+    if sample_status_file_exists(status_file):
+        with open(status_path, "rb") as f:
+            return pickle.load(f)
+
+
+def get_hybpiper_input(all_samples):
+    hybpiper_samples = []
+    for sample in all_samples:
+        status_file = Path(
+            outdir,
+            "010_tcdemux_unpooled",
+            "all_samples",
+            f"{sample}.check",
+        )
+        if sample_status_file_exists(status_file):
+            if check_sample_status(sample):
+                hybpiper_samples.append(sample)
+            else:
+                logger.warning(f"Dropping sample {sample}")
+    return sorted(set(hybpiper_samples))
+
+
+hybpiper_samples = get_hybpiper_input(all_samples)
+
 # see tomharrop/gap_library_tests/data/target_files/README.md for how this was
 # generated
 target_file = Path("data", "target_files", "gap_targets.fa.gz")
@@ -134,28 +168,78 @@ target_file = Path("data", "target_files", "gap_targets.fa.gz")
 #         ),
 
 
-module hybpiper:
-    snakefile:
-        hybpiper_snakefile
-    config:
-        {
-            "outdir": Path(outdir, "020_hybpiper"),
-            "read_directory": Path(
-            outdir, "010_tcdemux_unpooled", "all_samples"
+if len(hybpiper_samples) > 0:
+
+    module hybpiper:
+        snakefile:
+            hybpiper_snakefile
+        config:
+            {
+                "outdir": Path(outdir, "020_hybpiper"),
+                "read_directory": Path(
+                outdir, "010_tcdemux_unpooled", "all_samples"
+                ),
+                "run_tmpdir": run_tmpdir,
+                "sample_list": get_hybpiper_input(all_samples),
+                "target_file": target_file,
+            }
+
+    use rule * from hybpiper as hybpiper_*
+
+    use rule hybpiper_assemble from hybpiper as hybpiper_hybpiper_assemble with:
+        resources:
+            time=lambda wildcards, attempt: 240 * attempt,
+            mem_mb=lambda wildcards, attempt: 16e3 * attempt,
+
+else:
+    logger.warning(
+        """No demuxed samples detected.
+Hybpiper target will be skipped.
+This warning should go away after you run demux_target."""
+    )
+
+
+rule demux_target:
+    input:
+        expand(
+            Path(
+                outdir,
+                "010_tcdemux_unpooled",
+                "all_samples",
+                "{sample}.check",
             ),
-            "run_tmpdir": run_tmpdir,
-            "sample_list": all_samples,
-            "target_file": target_file,
-        }
+            sample=all_samples,
+        ),
 
 
-use rule * from hybpiper as hybpiper_*
+rule check_demuxed_samples:
+    input:
+        r1=Path(
+            outdir,
+            "010_tcdemux_unpooled",
+            "all_samples",
+            "{sample}.r1.fastq.gz",
+        ),
+        r2=Path(
+            outdir,
+            "010_tcdemux_unpooled",
+            "all_samples",
+            "{sample}.r2.fastq.gz",
+        ),
+    output:
+        Path(
+            outdir,
+            "010_tcdemux_unpooled",
+            "all_samples",
+            "{sample}.check",
+        ),
+    run:
+        sample_status = (Path(input.r1).stat().st_size != 0) and (
+            Path(input.r1).stat().st_size != 0
+        )
+        with open(output[0], "wb") as f:
+            pickle.dump(sample_status, f)
 
-
-use rule hybpiper_assemble from hybpiper as hybpiper_hybpiper_assemble with:
-    resources:
-        time=lambda wildcards, attempt: 240 * attempt,
-        mem_mb=lambda wildcards, attempt: 16e3 * attempt,
 
 
 rule collect_demuxed_files:
