@@ -164,7 +164,7 @@ rule collect_demuxed_files:
         ),
     threads: 1
     resources:
-        mem_mb=1e3,
+        mem_mb=int(1e3),
         time=1,
     shell:
         "ln -s "
