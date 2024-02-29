@@ -199,7 +199,7 @@ rule generate_namelist:
     threads: 1
     resources:
         mem_mb=int(1e3),
-        time=1,
+        time=lambda wildcards, attempt: 10 * attempt,
     run:
         hybpiper_samples = []
         dropped_samples = []
