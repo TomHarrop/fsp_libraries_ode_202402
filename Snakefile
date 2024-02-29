@@ -226,9 +226,9 @@ rule generate_namelist:
                 logger.warning(f"Dropping sample {sample}")
                 dropped_samples.append(sample)
         with open(output.namelist, "wt") as f:
-            f.writelines(hybpiper_samples)
+            f.write("\n".join(hybpiper_samples))
         with open(output.droplist, "wt") as f:
-            f.writelines(dropped_samples)
+            f.write("\n".join(dropped_samples))
 
 
 rule collect_demuxed_files:
