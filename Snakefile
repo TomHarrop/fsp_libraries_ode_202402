@@ -118,7 +118,6 @@ def sample_status_file_exists(status_file):
     return Path(status_file).resolve().is_file()
 
 
-@cache
 def check_sample_status(status_file):
     if sample_status_file_exists(status_file):
         with open(status_path, "rb") as f:
@@ -233,9 +232,13 @@ rule check_demuxed_samples:
             "all_samples",
             "{sample}.check",
         ),
+    threads: 1
+    resources:
+        mem_mb=int(1e3),
+        time=1,
     run:
         sample_status = (Path(input.r1).stat().st_size > 20) and (
-            Path(input.r1).stat().st_size > 20
+            Path(input.r2).stat().st_size > 20
         )
         with open(output[0], "wb") as f:
             pickle.dump(sample_status, f)
