@@ -134,7 +134,7 @@ def get_hybpiper_input(all_samples):
             f"{sample}.check",
         ).resolve()
         if sample_status_file_exists(status_file):
-            if check_sample_status(sample):
+            if check_sample_status(status_file):
                 hybpiper_samples.append(sample)
             else:
                 logger.warning(f"Dropping sample {sample}")
