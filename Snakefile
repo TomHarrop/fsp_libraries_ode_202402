@@ -179,7 +179,7 @@ if len(hybpiper_samples) > 0:
                 outdir, "010_tcdemux_unpooled", "all_samples"
                 ),
                 "run_tmpdir": run_tmpdir,
-                "sample_list": get_hybpiper_input(all_samples),
+                "sample_list": hybpiper_samples,
                 "target_file": target_file,
             }
 
