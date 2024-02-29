@@ -119,9 +119,9 @@ def sample_status_file_exists(status_file):
 
 
 def check_sample_status(status_file):
-    if sample_status_file_exists(status_file):
-        with open(status_path, "rb") as f:
-            return pickle.load(f)
+    status_path = Path(status_file).resolve()
+    with open(status_path, "rb") as f:
+        return pickle.load(f)
 
 
 def get_hybpiper_input(all_samples):
