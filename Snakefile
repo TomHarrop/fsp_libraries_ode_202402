@@ -234,8 +234,8 @@ rule check_demuxed_samples:
             "{sample}.check",
         ),
     run:
-        sample_status = (Path(input.r1).stat().st_size != 0) and (
-            Path(input.r1).stat().st_size != 0
+        sample_status = (Path(input.r1).stat().st_size > 20) and (
+            Path(input.r1).stat().st_size > 20
         )
         with open(output[0], "wb") as f:
             pickle.dump(sample_status, f)
