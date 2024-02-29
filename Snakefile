@@ -80,7 +80,7 @@ adaptor_files = [Path("data", "adaptors", "bbmap_39.01_adaptors.fa")]
 tcdemux = "docker://quay.io/biocontainers/tcdemux:0.0.24--pyhdfd78af_0"
 
 # modules
-module_tag = "0.0.42"
+module_tag = "0.0.43"
 hybpiper_snakefile = github(
     "tomharrop/smk-modules",
     path="modules/hybpiper/Snakefile",
@@ -110,39 +110,6 @@ for plate_path in all_plates:
 
 all_samples = sorted(set(sample_to_plate.keys()))
 
-
-# This is necessary because some samples have zero reads. The pipeline has to
-# be run in two steps for now.
-@cache
-def sample_status_file_exists(status_file):
-    return Path(status_file).is_file()
-
-
-def check_sample_status(status_file):
-    status_path = Path(status_file).resolve()
-    with open(status_path, "rb") as f:
-        return pickle.load(f)
-
-
-def get_hybpiper_input(all_samples):
-    hybpiper_samples = []
-    for sample in all_samples:
-        status_file = Path(
-            outdir,
-            "010_tcdemux_unpooled",
-            "all_samples",
-            f"{sample}.check",
-        ).resolve()
-        if sample_status_file_exists(status_file):
-            if check_sample_status(status_file):
-                hybpiper_samples.append(sample)
-            else:
-                logger.warning(f"Dropping sample {sample}")
-    return sorted(set(hybpiper_samples))
-
-
-hybpiper_samples = get_hybpiper_input(all_samples)
-
 # see tomharrop/gap_library_tests/data/target_files/README.md for how this was
 # generated
 target_file = Path("data", "target_files", "gap_targets.fa.gz")
@@ -167,82 +134,101 @@ target_file = Path("data", "target_files", "gap_targets.fa.gz")
 #         ),
 
 
-if len(hybpiper_samples) > 0:
-
-    module hybpiper:
-        snakefile:
-            hybpiper_snakefile
-        config:
-            {
-                "outdir": Path(outdir, "020_hybpiper"),
-                "read_directory": Path(
-                outdir, "010_tcdemux_unpooled", "all_samples"
-                ),
-                "run_tmpdir": run_tmpdir,
-                "sample_list": hybpiper_samples,
-                "target_file": target_file,
-            }
-
-    use rule * from hybpiper as hybpiper_*
-
-    use rule hybpiper_assemble from hybpiper as hybpiper_hybpiper_assemble with:
-        resources:
-            time=lambda wildcards, attempt: 240 * attempt,
-            mem_mb=lambda wildcards, attempt: 16e3 * attempt,
-
-else:
-    logger.warning(
-        """No demuxed samples detected.
-Hybpiper target will be skipped.
-This warning should go away after you run demux_target."""
-    )
+module hybpiper:
+    snakefile:
+        hybpiper_snakefile
+    config:
+        {
+            "outdir": Path(outdir, "020_hybpiper"),
+            "read_directory": Path(
+            outdir, "010_tcdemux_unpooled", "all_samples"
+            ),
+            "run_tmpdir": run_tmpdir,
+            "namelist": Path(
+                outdir,
+                "010_tcdemux_unpooled",
+                "sample_reports",
+                "samples_for_hybpiper.txt",
+            ),
+            "target_file": target_file,
+        }
 
 
-rule demux_target:
+use rule * from hybpiper as hybpiper_*
+
+
+use rule assemble from hybpiper as hybpiper_assemble with:
+    resources:
+        time=lambda wildcards, attempt: 240 * attempt,
+        mem_mb=lambda wildcards, attempt: 16e3 * attempt,
+
+
+use rule stats from hybpiper as hybpiper_stats with:
+    resources:
+        time=lambda wildcards, attempt: 240 * attempt,
+        mem_mb=lambda wildcards, attempt: 16e3 * (attempt**2),
+
+
+rule generate_namelist:
     input:
         expand(
             Path(
                 outdir,
                 "010_tcdemux_unpooled",
                 "all_samples",
-                "{sample}.check",
+                "{sample}.{read}.fastq.gz",
             ),
             sample=all_samples,
-        ),
-
-
-rule check_demuxed_samples:
-    input:
-        r1=Path(
-            outdir,
-            "010_tcdemux_unpooled",
-            "all_samples",
-            "{sample}.r1.fastq.gz",
-        ),
-        r2=Path(
-            outdir,
-            "010_tcdemux_unpooled",
-            "all_samples",
-            "{sample}.r2.fastq.gz",
+            read=["r1", "r2"],
         ),
     output:
-        Path(
+        namelist=Path(
             outdir,
             "010_tcdemux_unpooled",
-            "all_samples",
-            "{sample}.check",
+            "sample_reports",
+            "samples_for_hybpiper.txt",
         ),
+        droplist=Path(
+            outdir,
+            "010_tcdemux_unpooled",
+            "sample_reports",
+            "dropped_samples.txt",
+        ),
+    params:
+        all_samples=all_samples,
     threads: 1
     resources:
         mem_mb=int(1e3),
         time=1,
     run:
-        sample_status = (Path(input.r1).stat().st_size > 20) and (
-            Path(input.r2).stat().st_size > 20
-        )
-        with open(output[0], "wb") as f:
-            pickle.dump(sample_status, f)
-
+        hybpiper_samples = []
+        dropped_samples = []
+        for sample in params.all_samples:
+            r1_path = Path(
+                outdir,
+                "010_tcdemux_unpooled",
+                "all_samples",
+                f"{sample}.r1.fastq.gz",
+            )
+            r2_path = Path(
+                outdir,
+                "010_tcdemux_unpooled",
+                "all_samples",
+                f"{sample}.r2.fastq.gz",
+            )
+            # check if the sample has reads and add it to the namelist if so
+            sample_has_reads = (r1_path.resolve().stat().st_size > 20) and (
+                r2_path.resolve().stat().st_size > 20
+            )
+            if sample_has_reads:
+                hybpiper_samples.append(sample)
+            else:
+                logger.warning(f"Dropping sample {sample}")
+                dropped_samples.append(sample)
+        with open(output.namelist, "wt") as f:
+            f.writelines(hybpiper_samples)
+        with open(output.droplist, "wt") as f:
+            f.writelines(dropped_samples)
 
 
 rule collect_demuxed_files:
