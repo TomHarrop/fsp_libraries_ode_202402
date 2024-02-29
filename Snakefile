@@ -115,7 +115,7 @@ all_samples = sorted(set(sample_to_plate.keys()))
 # be run in two steps for now.
 @cache
 def sample_status_file_exists(status_file):
-    return Path(status_file).resolve().is_file()
+    return Path(status_file).is_file()
 
 
 def check_sample_status(status_file):
@@ -132,7 +132,7 @@ def get_hybpiper_input(all_samples):
             "010_tcdemux_unpooled",
             "all_samples",
             f"{sample}.check",
-        )
+        ).resolve()
         if sample_status_file_exists(status_file):
             if check_sample_status(sample):
                 hybpiper_samples.append(sample)
